@@ -8,7 +8,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-TOKEN = os.getenv("TELEGRAM_TOKEN")  # hoặc gán trực tiếp: "123456:ABC-..."
+TOKEN = os.getenv("7980211121:AAHq9v27S5YMIowrVQJnhWcZqkF2zwNt_G0")  # hoặc gán trực tiếp: "123456:ABC-..."
 
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
