@@ -5,7 +5,7 @@ from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
 
 # Lấy token từ biến môi trường
-TOKEN = os.getenv("TELEGRAM_TOKEN")
+TOKEN = os.getenv("7980211121:AAHq9v27S5YMIowrVQJnhWcZqkF2zwNt_G0")
 
 # File lưu dữ liệu
 DATA_FILE = "data.json"
@@ -53,6 +53,9 @@ def add(update: Update, context: CallbackContext):
         print("Lỗi:", e)
 
 def main():
+    if not TOKEN:
+        raise ValueError("❌ Chưa có TELEGRAM_TOKEN trong biến môi trường!")
+
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
