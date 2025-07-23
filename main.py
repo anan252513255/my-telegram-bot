@@ -1,101 +1,66 @@
-import os
 import json
+import os
 from datetime import datetime
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Updater, CommandHandler, CallbackContext
 
-# Cấu hình
+# Lấy token từ biến môi trường
 TOKEN = os.getenv("TELEGRAM_TOKEN")
+
+# File lưu dữ liệu
 DATA_FILE = "data.json"
 
-# Khởi tạo file dữ liệu nếu chưa có
-if not os.path.exists(DATA_FILE):
-    with open(DATA_FILE, "w") as f:
-        json.dump({"transactions": []}, f)
+# Hàm xử lý /start
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text("Hello! Bot đã chạy trên Render.")
 
-# --- Hàm xử lý dữ liệu ---
-def load_data():
-    with open(DATA_FILE, "r") as f:
-        return json.load(f)
-
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-# --- Command Handlers ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "💰 **Bot Quản Lý Chi Tiêu**\n\n"
-        "Các lệnh hỗ trợ:\n"
-        "/add <số_tiền> <mô_tả> - Thêm chi tiêu\n"
-        "/report - Xem tổng chi hôm nay\n"
-        "/report <ngày> - Xem chi tiết theo ngày (VD: /report 2025-07-23)"
-    )
-
-async def add_expense(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Hàm xử lý /add
+def add(update: Update, context: CallbackContext):
     try:
         args = context.args
         if len(args) < 2:
-            await update.message.reply_text("⚠️ Sai cú pháp. Ví dụ: /add 50000 cơm trưa")
+            update.message.reply_text("❌ Sai cú pháp. Dùng: /add <số tiền> <nội dung>")
             return
 
-        amount = float(args[0])
-        description = " ".join(args[1:])
-        today = datetime.now().strftime("%Y-%m-%d")
+        so_tien = int(args[0])
+        noi_dung = " ".join(args[1:])
+        user_id = str(update.message.from_user.id)
+        ngay = datetime.now().strftime("%Y-%m-%d")
 
-        data = load_data()
-        data["transactions"].append({
-            "date": today,
-            "amount": amount,
-            "description": description
+        # Đọc dữ liệu hiện có
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = {}
+
+        # Ghi thêm chi tiêu
+        if user_id not in data:
+            data[user_id] = []
+
+        data[user_id].append({
+            "ngay": ngay,
+            "so_tien": so_tien,
+            "noi_dung": noi_dung
         })
-        save_data(data)
 
-        await update.message.reply_text(
-            f"✅ Đã thêm {amount:,.0f}đ cho: {description}\n"
-            f"📅 Ngày: {today}"
-        )
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
-    except ValueError:
-        await update.message.reply_text("⚠️ Số tiền phải là giá trị số!")
+        update.message.reply_text(f"✅ Đã ghi {so_tien} cho: {noi_dung}")
     except Exception as e:
-        await update.message.reply_text(f"❌ Lỗi: {str(e)}")
+        update.message.reply_text("⚠️ Lỗi khi thêm chi tiêu.")
+        print("Lỗi:", e)
 
-async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        args = context.args
-        date_filter = datetime.now().strftime("%Y-%m-%d") if not args else args[0]
-
-        data = load_data()
-        filtered = [t for t in data["transactions"] if t["date"] == date_filter]
-        total = sum(t["amount"] for t in filtered)
-
-        report_text = (
-            f"📊 Báo cáo ngày {date_filter}\n"
-            f"----------------------------\n"
-            f"• Tổng chi: {total:,.0f}đ\n"
-            f"• Số giao dịch: {len(filtered)}\n\n"
-        )
-
-        for idx, t in enumerate(filtered, 1):
-            report_text += f"{idx}. {t['description']}: {t['amount']:,.0f}đ\n"
-
-        await update.message.reply_text(report_text if filtered else "📌 Không có dữ liệu")
-
-    except Exception as e:
-        await update.message.reply_text(f"❌ Lỗi: {str(e)}")
-
-# --- Khởi chạy Bot ---
 def main():
-    app = Application.builder().token(TOKEN).build()
-    
-    # Đăng ký commands
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("add", add_expense))
-    app.add_handler(CommandHandler("report", report))
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
 
-    print("Bot is running...")
-    app.run_polling()
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("add", add))
+
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == "__main__":
     main()
