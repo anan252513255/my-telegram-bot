@@ -5,7 +5,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 # Lấy token từ biến môi trường
-TOKEN = os.getenv("TELEGRAM_TOKEN")
+TOKEN = os.getenv("BOT-TOKEN")
 
 # Tạo thư mục lưu file nếu chưa có
 DATA_DIR = "data"
