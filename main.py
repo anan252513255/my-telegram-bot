@@ -1,120 +1,107 @@
-import json
 import os
+import json
 from datetime import datetime
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    ContextTypes,
-)
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-TOKEN = os.getenv("7980211121:AAHq9v27S5YMIowrVQJnhWcZqkF2zwNt_G0")  # hoặc gán trực tiếp: "123456:ABC-..."
+# Lấy token từ biến môi trường
+TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# /start
+# Tạo thư mục lưu file nếu chưa có
+DATA_DIR = "data"
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+
+def get_user_file(user_id):
+    return os.path.join(DATA_DIR, f"{user_id}.json")
+
+def load_data(user_id):
+    filepath = get_user_file(user_id)
+    if os.path.exists(filepath):
+        with open(filepath, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+def save_data(user_id, data):
+    filepath = get_user_file(user_id)
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Chào bạn! Đây là bot quản lý thu nhập và chi tiêu.\nDùng /help để xem hướng dẫn."
+        "👋 Chào bạn! Tôi là bot quản lý tài chính.\n"
+        "Ghi chi tiêu: /add 50000 cơm trưa\n"
+        "Ghi thu nhập: /income 300000 lương\n"
+        "Xem báo cáo: /report"
     )
 
-# /help
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "/addin SỐTIỀN GHI_CHÚ – Ghi thu nhập\n"
-        "/addout SỐTIỀN GHI_CHÚ – Ghi chi tiêu\n"
-        "/report – Xem báo cáo hôm nay"
-    )
-
-# Ghi thu nhập
-async def add_income(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await save_entry(update, context, entry_type="income")
-
-# Ghi chi tiêu
 async def add_expense(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await save_entry(update, context, entry_type="expense")
+    user_id = update.message.from_user.id
+    text = update.message.text.replace("/add", "").strip()
 
-# Lưu dữ liệu (thu/chi)
-async def save_entry(update: Update, context: ContextTypes.DEFAULT_TYPE, entry_type: str):
     try:
-        user_id = str(update.message.from_user.id)
-        file_name = f"data_{user_id}.json"
-        text = " ".join(context.args)
         amount_str, *note_parts = text.split()
         amount = int(amount_str)
         note = " ".join(note_parts)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        entry = {
-            "date": datetime.now().strftime("%Y-%m-%d"),
-            "amount": amount,
-            "note": note,
-            "type": entry_type
-        }
+        entry = {"type": "expense", "amount": amount, "note": note, "time": now}
 
-        data = []
-        if os.path.exists(file_name):
-            with open(file_name, "r", encoding="utf-8") as f:
-                data = json.load(f)
-
+        data = load_data(user_id)
         data.append(entry)
+        save_data(user_id, data)
 
-        with open(file_name, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-
-        prefix = "+" if entry_type == "income" else "-"
-        await update.message.reply_text(f"✅ Đã ghi {entry_type}: {prefix}{amount} đ - {note}")
+        await update.message.reply_text(f"📝 Đã ghi chi tiêu: {amount}đ - {note}")
     except:
-        await update.message.reply_text(
-            "⚠ Sai cú pháp.\nVí dụ:\n/addin 500000 lương\n/addout 20000 ăn sáng"
-        )
+        await update.message.reply_text("❌ Sai cú pháp! Dùng: /add 50000 cơm trưa")
 
-# /report – Báo cáo thu/chi hôm nay
+async def add_income(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    text = update.message.text.replace("/income", "").strip()
+
+    try:
+        amount_str, *note_parts = text.split()
+        amount = int(amount_str)
+        note = " ".join(note_parts)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        entry = {"type": "income", "amount": amount, "note": note, "time": now}
+
+        data = load_data(user_id)
+        data.append(entry)
+        save_data(user_id, data)
+
+        await update.message.reply_text(f"💰 Đã ghi thu nhập: {amount}đ - {note}")
+    except:
+        await update.message.reply_text("❌ Sai cú pháp! Dùng: /income 300000 lương tháng")
+
 async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.message.from_user.id)
-    file_name = f"data_{user_id}.json"
-    today = datetime.now().strftime("%Y-%m-%d")
-
-    if not os.path.exists(file_name):
-        await update.message.reply_text("📭 Bạn chưa có dữ liệu.")
+    user_id = update.message.from_user.id
+    data = load_data(user_id)
+    if not data:
+        await update.message.reply_text("📭 Bạn chưa có ghi chép nào.")
         return
 
-    with open(file_name, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    income = sum(x["amount"] for x in data if x["type"] == "income")
+    expense = sum(x["amount"] for x in data if x["type"] == "expense")
+    balance = income - expense
 
-    income_total = 0
-    expense_total = 0
-    lines = []
+    lines = [
+        f'{x["time"]}: {x["amount"]}đ - {x["note"]} ({x["type"]})'
+        for x in data[-5:]
+    ]
 
-    for item in data:
-        if item["date"] == today:
-            amount = item["amount"]
-            note = item["note"]
-            if item["type"] == "income":
-                income_total += amount
-                lines.append(f"💰 +{amount} đ - {note}")
-            else:
-                expense_total += amount
-                lines.append(f"💸 -{amount} đ - {note}")
+    response = "\n".join(lines)
+    response += f"\n\n📊 Báo cáo:\n- Thu nhập: {income}đ\n- Chi tiêu: {expense}đ\n- Số dư: {balance}đ"
 
-    if not lines:
-        await update.message.reply_text("📅 Hôm nay bạn chưa ghi thu/chi nào.")
-        return
+    await update.message.reply_text(response)
 
-    balance = income_total - expense_total
-    message = "\n".join(lines)
-    message += f"\n\n📊 Tổng thu: +{income_total} đ\n📉 Tổng chi: -{expense_total} đ\n💼 Số dư: {balance} đ"
-    await update.message.reply_text(message)
-
-# Main
-def main():
+if __name__ == "__main__":
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("addin", add_income))
-    app.add_handler(CommandHandler("addout", add_expense))
+    app.add_handler(CommandHandler("add", add_expense))
+    app.add_handler(CommandHandler("income", add_income))
     app.add_handler(CommandHandler("report", report))
 
-    print("🤖 Bot đang chạy...")
     app.run_polling()
-
-if __name__ == "__main__":
-    main()
